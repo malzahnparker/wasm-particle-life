@@ -167,7 +167,7 @@ fn update_particles(
         .map(|(transform, particle)| (transform.translation, particle.color_id))
         .collect();
 
-    for (mut transform, particle) in particle_query.iter_mut() {
+    for (mut transform, particle) in &mut particle_query {
         let mut force = Vec2::ZERO;
         let mut count = 0.0;
 
@@ -277,15 +277,73 @@ fn move_camera(
 
 fn handle_matrix_regeneration(
     keyboard: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     mut particle_system: ResMut<ParticleSystem>,
+    particles: Query<Entity, With<Particle>>,
 ) {
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        // Clear all existing particles
+        for entity in &particles {
+            commands.entity(entity).despawn();
+        }
+
+        // Generate new colors and matrix
+        let mut rng = rand::rng();
+        let all_colors = vec![
+            css::RED,
+            css::CRIMSON,
+            css::CORAL,
+            css::ORANGE,
+            css::GOLD,
+            css::GREEN_YELLOW,
+            css::YELLOW_GREEN,
+            css::GREEN,
+            css::SEA_GREEN,
+            css::DARK_CYAN,
+            css::DEEP_SKY_BLUE,
+            css::DODGER_BLUE,
+            css::BLUE,
+            css::MEDIUM_BLUE,
+            css::INDIGO,
+            css::BLUE_VIOLET,
+        ];
+
+        let num_colors = rng.random_range(2..=16);
+        let mut colors_indices: Vec<usize> = (0..all_colors.len()).collect();
+        colors_indices.shuffle(&mut rng);
+        let colors: Vec<Color> = colors_indices[0..num_colors]
+            .iter()
+            .map(|&i| Color::from(all_colors[i]))
+            .collect();
+
+        // Update ParticleSystem
+        particle_system.colors = colors;
+        particle_system.regenerate_matrix();
+        particle_system.regenerate_constants();
+
+        // Spawn new particles
+        for _ in 0..NUM_PARTICLES {
+            let x = rng.random_range(-WINDOW_WIDTH / 2.0..WINDOW_WIDTH / 2.0);
+            let y = rng.random_range(-WINDOW_HEIGHT / 2.0..WINDOW_HEIGHT / 2.0);
+            let color_id = rng.random_range(0..particle_system.colors.len());
+
+            commands.spawn((
+                Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
+                MeshMaterial2d(
+                    materials.add(ColorMaterial::from(particle_system.colors[color_id])),
+                ),
+                Transform::from_xyz(x, y, 0.0),
+                Particle { color_id },
+            ));
+        }
+    }
     if keyboard.just_pressed(KeyCode::KeyQ) {
         particle_system.regenerate_matrix();
-        println!("Matrix regenerated: {:?}", particle_system.behavior_matrix);
     }
     if keyboard.just_pressed(KeyCode::KeyT) {
         particle_system.regenerate_constants();
-        println!("Matrix regenerated: {:?}", particle_system.behavior_matrix);
     }
 }
 
