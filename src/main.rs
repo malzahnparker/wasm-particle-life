@@ -1,6 +1,6 @@
 use bevy::{
     color::palettes::css,
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     window::WindowResolution,
 };
@@ -24,26 +24,135 @@ struct ParticleSystem {
 impl ParticleSystem {
     fn new() -> Self {
         let all_colors = vec![
+            // Reds
             css::RED,
             css::CRIMSON,
-            css::CORAL,
+            css::DARK_RED,
+            css::FIRE_BRICK,
+            css::INDIAN_RED,
+            css::LIGHT_CORAL,
+            css::SALMON,
+            css::DARK_SALMON,
+            css::LIGHT_SALMON,
+            css::ORANGE_RED,
+            // Oranges
+            css::ORANGE_RED,
+            css::TOMATO,
+            css::DARK_ORANGE,
             css::ORANGE,
             css::GOLD,
-            css::GREEN_YELLOW,
+            css::DARK_GOLDENROD,
+            css::GOLDENROD,
+            css::PALE_GOLDENROD,
+            css::PEACHPUFF,
+            css::NAVAJO_WHITE,
+            // Yellows
+            css::YELLOW,
+            css::LIGHT_YELLOW,
+            css::LEMON_CHIFFON,
+            css::LIGHT_GOLDENROD_YELLOW,
+            css::PAPAYA_WHIP,
+            css::MOCCASIN,
+            css::KHAKI,
+            css::DARK_KHAKI,
             css::YELLOW_GREEN,
-            css::GREEN,
+            css::OLIVE,
+            // Greens
+            css::LIME,
+            css::LIMEGREEN,
+            css::LAWN_GREEN,
+            css::CHARTREUSE,
+            css::GREEN_YELLOW,
+            css::SPRING_GREEN,
+            css::MEDIUM_SPRING_GREEN,
+            css::LIGHT_GREEN,
+            css::PALE_GREEN,
+            css::DARK_SEA_GREEN,
+            css::MEDIUM_SEA_GREEN,
             css::SEA_GREEN,
+            css::FOREST_GREEN,
+            css::GREEN,
+            css::DARK_GREEN,
+            // Cyans
+            css::MEDIUM_AQUAMARINE,
+            css::AQUA,
             css::DARK_CYAN,
+            css::LIGHT_CYAN,
+            css::PALE_TURQUOISE,
+            css::AQUAMARINE,
+            css::TURQUOISE,
+            css::MEDIUM_TURQUOISE,
+            css::DARK_TURQUOISE,
+            css::LIGHT_SEA_GREEN,
+            // Blues
             css::DEEP_SKY_BLUE,
+            css::LIGHT_BLUE,
+            css::SKY_BLUE,
+            css::LIGHT_SKY_BLUE,
+            css::STEEL_BLUE,
+            css::ALICE_BLUE,
             css::DODGER_BLUE,
+            css::ROYAL_BLUE,
             css::BLUE,
             css::MEDIUM_BLUE,
-            css::INDIGO,
+            css::DARK_BLUE,
+            css::NAVY,
+            css::MIDNIGHT_BLUE,
+            css::CORNFLOWER_BLUE,
+            css::SLATE_BLUE,
+            // Purples
+            css::MEDIUM_SLATE_BLUE,
+            css::DARK_SLATE_BLUE,
+            css::LAVENDER,
+            css::THISTLE,
+            css::PLUM,
+            css::VIOLET,
+            css::ORCHID,
+            css::MAGENTA,
+            css::MEDIUM_ORCHID,
+            css::MEDIUM_PURPLE,
             css::BLUE_VIOLET,
+            css::DARK_VIOLET,
+            css::DARK_ORCHID,
+            css::DARK_MAGENTA,
+            css::PURPLE,
+            // Pinks
+            css::INDIGO,
+            css::MEDIUM_VIOLET_RED,
+            css::PALE_VIOLETRED,
+            css::DEEP_PINK,
+            css::HOT_PINK,
+            css::LIGHT_PINK,
+            css::PINK,
+            css::ANTIQUE_WHITE,
+            css::BEIGE,
+            css::BISQUE,
+            // Browns
+            css::SADDLE_BROWN,
+            css::SIENNA,
+            css::CHOCOLATE,
+            css::PERU,
+            css::SANDY_BROWN,
+            css::BURLYWOOD,
+            css::TAN,
+            css::ROSY_BROWN,
+            css::MOCCASIN,
+            css::NAVAJO_WHITE,
+            // Grays and others
+            css::MAROON,
+            css::BROWN,
+            css::DARK_OLIVEGREEN,
+            css::OLIVE_DRAB,
+            css::DARK_CYAN,
+            css::TEAL,
+            css::DARK_SLATE_GRAY,
+            css::SLATE_GRAY,
+            css::LIGHT_SLATE_GRAY,
+            css::DIM_GRAY,
         ];
 
         let mut rng = rand::rng();
-        let num_colors = rng.random_range(2..=16);
+        let num_colors = rng.random_range(20..=100);
         let mut colors_indices: Vec<usize> = (0..all_colors.len()).collect();
         colors_indices.shuffle(&mut rng);
         let colors: Vec<Color> = colors_indices[0..num_colors]
@@ -59,7 +168,7 @@ impl ParticleSystem {
 
         let beta = rng.random_range(0.1..=0.4);
         let gamma = rng.random_range(0.6..=0.9);
-        let attraction_radius = rng.random_range(50.0..=200.0);
+        let attraction_radius = 100.0;
 
         ParticleSystem {
             colors,
@@ -85,7 +194,7 @@ impl ParticleSystem {
         let mut rng = rand::rng();
         self.beta = rng.random_range(0.1..=0.4);
         self.gamma = rng.random_range(0.6..=0.9);
-        self.attraction_radius = rng.random_range(50.0..=200.0);
+        self.attraction_radius = 100.0;
     }
 }
 
@@ -93,7 +202,7 @@ const WINDOW_WIDTH: f32 = 1920.0;
 const WINDOW_HEIGHT: f32 = 1080.0;
 const PARTICLE_SIZE: f32 = 5.0;
 const NUM_PARTICLES: usize = 5000;
-const BASE_SPEED: f32 = 100.0;
+const BASE_SPEED: f32 = 1600.0;
 const CAMERA_SPEED: f32 = 500.0;
 
 fn main() {
@@ -152,10 +261,24 @@ fn setup(
 }
 
 fn update_particles(
+    diagnostics: Res<DiagnosticsStore>,
     particle_system: Res<ParticleSystem>,
     time: Res<Time>,
     mut particle_query: Query<(&mut Transform, &Particle)>,
 ) {
+    if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
+        if let Some(raw) = fps.value() {
+            println!("{raw:.2}");
+        }
+        if let Some(sma) = fps.average() {
+            println!("{sma:.2}");
+        }
+        if let Some(ema) = fps.smoothed() {
+            println!("{ema:.2}");
+        }
+    };
+    dbg!(particle_query.iter().count());
+
     let dt = time.delta_secs() * particle_system.speed;
     let beta = particle_system.beta;
     let gamma = particle_system.gamma;
@@ -292,25 +415,134 @@ fn handle_matrix_regeneration(
         // Generate new colors and matrix
         let mut rng = rand::rng();
         let all_colors = vec![
+            // Reds
             css::RED,
             css::CRIMSON,
-            css::CORAL,
+            css::DARK_RED,
+            css::FIRE_BRICK,
+            css::INDIAN_RED,
+            css::LIGHT_CORAL,
+            css::SALMON,
+            css::DARK_SALMON,
+            css::LIGHT_SALMON,
+            css::ORANGE_RED,
+            // Oranges
+            css::ORANGE_RED,
+            css::TOMATO,
+            css::DARK_ORANGE,
             css::ORANGE,
             css::GOLD,
-            css::GREEN_YELLOW,
+            css::DARK_GOLDENROD,
+            css::GOLDENROD,
+            css::PALE_GOLDENROD,
+            css::PEACHPUFF,
+            css::NAVAJO_WHITE,
+            // Yellows
+            css::YELLOW,
+            css::LIGHT_YELLOW,
+            css::LEMON_CHIFFON,
+            css::LIGHT_GOLDENROD_YELLOW,
+            css::PAPAYA_WHIP,
+            css::MOCCASIN,
+            css::KHAKI,
+            css::DARK_KHAKI,
             css::YELLOW_GREEN,
-            css::GREEN,
+            css::OLIVE,
+            // Greens
+            css::LIME,
+            css::LIMEGREEN,
+            css::LAWN_GREEN,
+            css::CHARTREUSE,
+            css::GREEN_YELLOW,
+            css::SPRING_GREEN,
+            css::MEDIUM_SPRING_GREEN,
+            css::LIGHT_GREEN,
+            css::PALE_GREEN,
+            css::DARK_SEA_GREEN,
+            css::MEDIUM_SEA_GREEN,
             css::SEA_GREEN,
+            css::FOREST_GREEN,
+            css::GREEN,
+            css::DARK_GREEN,
+            // Cyans
+            css::MEDIUM_AQUAMARINE,
+            css::AQUA,
             css::DARK_CYAN,
+            css::LIGHT_CYAN,
+            css::PALE_TURQUOISE,
+            css::AQUAMARINE,
+            css::TURQUOISE,
+            css::MEDIUM_TURQUOISE,
+            css::DARK_TURQUOISE,
+            css::LIGHT_SEA_GREEN,
+            // Blues
             css::DEEP_SKY_BLUE,
+            css::LIGHT_BLUE,
+            css::SKY_BLUE,
+            css::LIGHT_SKY_BLUE,
+            css::STEEL_BLUE,
+            css::ALICE_BLUE,
             css::DODGER_BLUE,
+            css::ROYAL_BLUE,
             css::BLUE,
             css::MEDIUM_BLUE,
-            css::INDIGO,
+            css::DARK_BLUE,
+            css::NAVY,
+            css::MIDNIGHT_BLUE,
+            css::CORNFLOWER_BLUE,
+            css::SLATE_BLUE,
+            // Purples
+            css::MEDIUM_SLATE_BLUE,
+            css::DARK_SLATE_BLUE,
+            css::LAVENDER,
+            css::THISTLE,
+            css::PLUM,
+            css::VIOLET,
+            css::ORCHID,
+            css::MAGENTA,
+            css::MEDIUM_ORCHID,
+            css::MEDIUM_PURPLE,
             css::BLUE_VIOLET,
+            css::DARK_VIOLET,
+            css::DARK_ORCHID,
+            css::DARK_MAGENTA,
+            css::PURPLE,
+            // Pinks
+            css::INDIGO,
+            css::MEDIUM_VIOLET_RED,
+            css::PALE_VIOLETRED,
+            css::DEEP_PINK,
+            css::HOT_PINK,
+            css::LIGHT_PINK,
+            css::PINK,
+            css::ANTIQUE_WHITE,
+            css::BEIGE,
+            css::BISQUE,
+            // Browns
+            css::SADDLE_BROWN,
+            css::SIENNA,
+            css::CHOCOLATE,
+            css::PERU,
+            css::SANDY_BROWN,
+            css::BURLYWOOD,
+            css::TAN,
+            css::ROSY_BROWN,
+            css::MOCCASIN,
+            css::NAVAJO_WHITE,
+            // Grays and others
+            css::MAROON,
+            css::BROWN,
+            css::DARK_OLIVEGREEN,
+            css::OLIVE_DRAB,
+            css::DARK_CYAN,
+            css::TEAL,
+            css::DARK_SLATE_GRAY,
+            css::SLATE_GRAY,
+            css::LIGHT_SLATE_GRAY,
+            css::DIM_GRAY,
         ];
 
-        let num_colors = rng.random_range(2..=16);
+        let num_colors = rng.random_range(20..=100);
         let mut colors_indices: Vec<usize> = (0..all_colors.len()).collect();
         colors_indices.shuffle(&mut rng);
         let colors: Vec<Color> = colors_indices[0..num_colors]
