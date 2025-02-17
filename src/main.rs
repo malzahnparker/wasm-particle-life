@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
     window::WindowResolution,
 };
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 
 #[derive(Component)]
 struct Particle {
@@ -16,36 +16,58 @@ struct ParticleSystem {
     colors: Vec<Color>,
     behavior_matrix: Vec<Vec<f32>>,
     speed: f32,
+    beta: f32,
+    gamma: f32,
+    attraction_radius: f32,
 }
 
 impl ParticleSystem {
     fn new() -> Self {
-        let colors = [
+        let all_colors = vec![
             css::RED,
+            css::CRIMSON,
+            css::CORAL,
             css::ORANGE,
-            css::YELLOW,
+            css::GOLD,
+            css::GREEN_YELLOW,
+            css::YELLOW_GREEN,
             css::GREEN,
+            css::SEA_GREEN,
+            css::DARK_CYAN,
+            css::DEEP_SKY_BLUE,
+            css::DODGER_BLUE,
             css::BLUE,
-            css::PURPLE,
+            css::MEDIUM_BLUE,
+            css::INDIGO,
+            css::BLUE_VIOLET,
         ];
+
         let mut rng = rand::rng();
+        let num_colors = rng.random_range(2..=16);
+        let mut colors_indices: Vec<usize> = (0..all_colors.len()).collect();
+        colors_indices.shuffle(&mut rng);
+        let colors: Vec<Color> = colors_indices[0..num_colors]
+            .iter()
+            .map(|&i| Color::from(all_colors[i]))
+            .collect();
+
         let n = colors.len();
 
         let behavior_matrix = (0..n)
             .map(|_| (0..n).map(|_| rng.random_range(-1.0..=1.0)).collect())
             .collect();
 
-        // Or specify exact behaviors like this:
-        // let behavior_matrix = vec![
-        //     vec![ 1.0, -1.0,  0.5], // Red's behavior
-        //     vec![ 1.0, -0.5, -0.5], // Yellow's behavior
-        //     vec![ 0.5, -0.5, -0.5], // Green's behavior
-        // ];
+        let beta = rng.random_range(0.1..=0.4);
+        let gamma = rng.random_range(0.6..=0.9);
+        let attraction_radius = rng.random_range(50.0..=200.0);
 
         ParticleSystem {
-            colors: colors.map(|color| color.into()).into(),
+            colors,
             behavior_matrix,
             speed: BASE_SPEED,
+            beta,
+            gamma,
+            attraction_radius,
         }
     }
 
@@ -59,15 +81,20 @@ impl ParticleSystem {
             .map(|_| (0..n).map(|_| rng.random_range(-1.0..=1.0)).collect())
             .collect();
     }
+    fn regenerate_constants(&mut self) {
+        let mut rng = rand::rng();
+        self.beta = rng.random_range(0.1..=0.4);
+        self.gamma = rng.random_range(0.6..=0.9);
+        self.attraction_radius = rng.random_range(50.0..=200.0);
+    }
 }
 
 const WINDOW_WIDTH: f32 = 1920.0;
 const WINDOW_HEIGHT: f32 = 1080.0;
 const PARTICLE_SIZE: f32 = 5.0;
-const NUM_PARTICLES: usize = 2000;
+const NUM_PARTICLES: usize = 5000;
 const BASE_SPEED: f32 = 100.0;
 const CAMERA_SPEED: f32 = 500.0;
-const ATTRACTION_RADIUS: f32 = 100.0; // Total radius of influence
 
 fn main() {
     App::new()
@@ -124,14 +151,17 @@ fn setup(
     }
 }
 
-const BETA: f32 = 0.2; // Distance where force transitions from negative to matrix value
-const GAMMA: f32 = 0.6; // Distance where force starts decreasing to 0
-
 fn update_particles(
     particle_system: Res<ParticleSystem>,
     time: Res<Time>,
     mut particle_query: Query<(&mut Transform, &Particle)>,
 ) {
+    let dt = time.delta_secs() * particle_system.speed;
+    let beta = particle_system.beta;
+    let gamma = particle_system.gamma;
+    let gamma_beta_diff = gamma - beta;
+    let one_minus_gamma = 1.0 - gamma;
+
     let particles: Vec<(Vec3, usize)> = particle_query
         .iter()
         .map(|(transform, particle)| (transform.translation, particle.color_id))
@@ -141,26 +171,24 @@ fn update_particles(
         let mut force = Vec2::ZERO;
         let mut count = 0.0;
 
-        for (other_pos, other_color_id) in &particles {
+        for (other_pos, other_color_id) in particles.iter() {
             if transform.translation == *other_pos {
                 continue;
             }
 
-            let distance = transform.translation.distance(*other_pos) / ATTRACTION_RADIUS;
+            let to_other = *other_pos - transform.translation;
+            let distance = to_other.length() / particle_system.attraction_radius;
+
             if distance < 1.0 {
-                let direction = (*other_pos - transform.translation).truncate().normalize();
+                let direction = to_other.truncate().normalize();
                 let behavior = particle_system.get_behavior(particle.color_id, *other_color_id);
 
-                // Smooth force calculation
-                let force_magnitude = if distance < BETA {
-                    // Smooth transition from -1 to 0
-                    -1.0 + (distance / BETA)
-                } else if distance < GAMMA {
-                    // Smooth transition from 0 to behavior value
-                    behavior * ((distance - BETA) / (GAMMA - BETA))
+                let force_magnitude = if distance < beta {
+                    -1.0 + (distance / beta)
+                } else if distance < gamma {
+                    behavior * ((distance - beta) / gamma_beta_diff)
                 } else {
-                    // Smooth transition from behavior value to 0
-                    behavior * (1.0 - (distance - GAMMA) / (1.0 - GAMMA))
+                    behavior * ((1.0 - distance) / one_minus_gamma)
                 };
 
                 force += direction * force_magnitude;
@@ -172,9 +200,7 @@ fn update_particles(
             force /= count;
         }
 
-        //particle.velocity.x = force.x * particle_system.speed;
-        //particle.velocity.y = force.y * particle_system.speed;
-        transform.translation += force.extend(0.0) * particle_system.speed * time.delta_secs();
+        transform.translation += force.extend(0.0) * dt;
     }
 }
 
@@ -253,8 +279,12 @@ fn handle_matrix_regeneration(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut particle_system: ResMut<ParticleSystem>,
 ) {
-    if keyboard.just_pressed(KeyCode::KeyR) {
+    if keyboard.just_pressed(KeyCode::KeyQ) {
         particle_system.regenerate_matrix();
+        println!("Matrix regenerated: {:?}", particle_system.behavior_matrix);
+    }
+    if keyboard.just_pressed(KeyCode::KeyT) {
+        particle_system.regenerate_constants();
         println!("Matrix regenerated: {:?}", particle_system.behavior_matrix);
     }
 }
