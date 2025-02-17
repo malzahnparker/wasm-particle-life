@@ -1,4 +1,3 @@
-use avian2d::prelude::*;
 use bevy::{
     color::palettes::css,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
@@ -21,7 +20,14 @@ struct ParticleSystem {
 
 impl ParticleSystem {
     fn new() -> Self {
-        let colors = [css::RED, css::YELLOW, css::BLUE];
+        let colors = [
+            css::RED,
+            css::ORANGE,
+            css::YELLOW,
+            css::GREEN,
+            css::BLUE,
+            css::PURPLE,
+        ];
         let mut rng = rand::rng();
         let n = colors.len();
 
@@ -55,13 +61,13 @@ impl ParticleSystem {
     }
 }
 
-const WINDOW_WIDTH: f32 = 384.0;
-const WINDOW_HEIGHT: f32 = 216.0;
-const PARTICLE_SIZE: f32 = 1.0;
-const ATTRACTION_RADIUS: f32 = 20.0;
+const WINDOW_WIDTH: f32 = 1920.0;
+const WINDOW_HEIGHT: f32 = 1080.0;
+const PARTICLE_SIZE: f32 = 5.0;
 const NUM_PARTICLES: usize = 2000;
 const BASE_SPEED: f32 = 100.0;
 const CAMERA_SPEED: f32 = 500.0;
+const ATTRACTION_RADIUS: f32 = 100.0; // Total radius of influence
 
 fn main() {
     App::new()
@@ -74,7 +80,6 @@ fn main() {
                 }),
                 ..Default::default()
             }),
-            PhysicsPlugins::default(),
             FrameTimeDiagnosticsPlugin,
             LogDiagnosticsPlugin::default(),
         ))
@@ -115,43 +120,24 @@ fn setup(
             MeshMaterial2d(materials.add(ColorMaterial::from(particle_system.colors[color_id]))),
             Transform::from_xyz(x, y, 0.0),
             Particle { color_id },
-            RigidBody::Dynamic,
-            Collider::circle(PARTICLE_SIZE / 2.0),
-            LockedAxes::ROTATION_LOCKED,
         ));
     }
-    commands.spawn((
-        RigidBody::Static,
-        Collider::rectangle(0.0, WINDOW_HEIGHT),
-        Transform::from_xyz(-WINDOW_WIDTH / 2.0, 0.0, 0.0),
-    ));
-    commands.spawn((
-        RigidBody::Static,
-        Collider::rectangle(0.0, WINDOW_HEIGHT),
-        Transform::from_xyz(WINDOW_WIDTH / 2.0, 0.0, 0.0),
-    ));
-    commands.spawn((
-        RigidBody::Static,
-        Collider::rectangle(WINDOW_WIDTH, 0.0),
-        Transform::from_xyz(0.0, -WINDOW_HEIGHT / 2.0, 0.0),
-    ));
-    commands.spawn((
-        RigidBody::Static,
-        Collider::rectangle(WINDOW_WIDTH, 0.0),
-        Transform::from_xyz(0.0, WINDOW_HEIGHT / 2.0, 0.0),
-    ));
 }
+
+const BETA: f32 = 0.2; // Distance where force transitions from negative to matrix value
+const GAMMA: f32 = 0.6; // Distance where force starts decreasing to 0
 
 fn update_particles(
     particle_system: Res<ParticleSystem>,
-    mut particle_query: Query<(&Transform, &Particle, &mut LinearVelocity)>,
+    time: Res<Time>,
+    mut particle_query: Query<(&mut Transform, &Particle)>,
 ) {
     let particles: Vec<(Vec3, usize)> = particle_query
         .iter()
-        .map(|(transform, particle, _)| (transform.translation, particle.color_id))
+        .map(|(transform, particle)| (transform.translation, particle.color_id))
         .collect();
 
-    for (transform, particle, mut velocity) in particle_query.iter_mut() {
+    for (mut transform, particle) in particle_query.iter_mut() {
         let mut force = Vec2::ZERO;
         let mut count = 0.0;
 
@@ -160,16 +146,24 @@ fn update_particles(
                 continue;
             }
 
-            let distance = transform.translation.distance(*other_pos);
-            let direction = (*other_pos - transform.translation).truncate().normalize();
-
-            if distance < ATTRACTION_RADIUS {
+            let distance = transform.translation.distance(*other_pos) / ATTRACTION_RADIUS;
+            if distance < 1.0 {
+                let direction = (*other_pos - transform.translation).truncate().normalize();
                 let behavior = particle_system.get_behavior(particle.color_id, *other_color_id);
 
-                // Apply force based on distance (stronger when closer)
+                // Smooth force calculation
+                let force_magnitude = if distance < BETA {
+                    // Smooth transition from -1 to 0
+                    -1.0 + (distance / BETA)
+                } else if distance < GAMMA {
+                    // Smooth transition from 0 to behavior value
+                    behavior * ((distance - BETA) / (GAMMA - BETA))
+                } else {
+                    // Smooth transition from behavior value to 0
+                    behavior * (1.0 - (distance - GAMMA) / (1.0 - GAMMA))
+                };
 
-                force += direction * behavior;
-
+                force += direction * force_magnitude;
                 count += 1.0;
             }
         }
@@ -178,11 +172,9 @@ fn update_particles(
             force /= count;
         }
 
-        // The velocity is directly determined by the force (which includes the behavior multiplier)
-
-        // Then in the update function:
-        velocity.x = force.x * particle_system.speed;
-        velocity.y = force.y * particle_system.speed;
+        //particle.velocity.x = force.x * particle_system.speed;
+        //particle.velocity.y = force.y * particle_system.speed;
+        transform.translation += force.extend(0.0) * particle_system.speed * time.delta_secs();
     }
 }
 
@@ -229,9 +221,6 @@ fn move_camera(
             MeshMaterial2d(materials.add(ColorMaterial::from(particle_system.colors[color_id]))),
             Transform::from_xyz(x, y, 0.0),
             Particle { color_id },
-            RigidBody::Dynamic,
-            Collider::circle(PARTICLE_SIZE / 2.0),
-            LockedAxes::ROTATION_LOCKED,
         ));
     }
     if mouse.pressed(MouseButton::Right) {
@@ -249,9 +238,6 @@ fn move_camera(
                 ),
                 Transform::from_xyz(x, y, 0.0),
                 Particle { color_id },
-                RigidBody::Dynamic,
-                Collider::circle(PARTICLE_SIZE / 2.0),
-                LockedAxes::ROTATION_LOCKED,
             ));
         }
     }
