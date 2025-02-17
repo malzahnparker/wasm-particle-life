@@ -26,33 +26,33 @@ cargo run --release
 
 ## Controls
 
-WASD: Move camera
+`WASD`: Move camera
 
-Up Arrow: Zoom in
+`↑`: Zoom in
 
-Down Arrow: Zoom out
+`↓`: Zoom out
 
-Q: Generate new behaviors
+`Q`: Generate new behaviors
 
-E: Generate new attraction distances
+`E`: Generate new attraction distances
 
-R: Restart the simulation
+`R`: Restart the simulation
 
-Left Click: Add particle
+`Left Click`: Add particle
 
-Right Click: Add 100 particles
+`Right Click`: Add 100 particles
 
 
 ## links
 
 [3]: https://www.rust-lang.org/
 
-[rust][3]
+- [Rust][3]
 
 [4]: https://bevyengine.org/
 
-[bevy][4]
+- [Bevy][4]
 
 [5]: https://particle-life.com/
 
-[particle-life][5]
+- [Particle-life][5]
