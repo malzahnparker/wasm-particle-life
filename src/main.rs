@@ -5,6 +5,7 @@ use bevy::{
     window::WindowResolution,
 };
 use rand::{seq::SliceRandom, Rng};
+use std::collections::HashMap;
 
 #[derive(Component)]
 struct Particle {
@@ -168,7 +169,7 @@ impl ParticleSystem {
 
         let beta = rng.random_range(0.1..=0.4);
         let gamma = rng.random_range(0.6..=0.9);
-        let attraction_radius = 100.0;
+        let attraction_radius = 50.0;
 
         ParticleSystem {
             colors,
@@ -194,7 +195,7 @@ impl ParticleSystem {
         let mut rng = rand::rng();
         self.beta = rng.random_range(0.1..=0.4);
         self.gamma = rng.random_range(0.6..=0.9);
-        self.attraction_radius = 100.0;
+        self.attraction_radius = 50.0;
     }
 }
 
@@ -261,61 +262,70 @@ fn setup(
 }
 
 fn update_particles(
-    diagnostics: Res<DiagnosticsStore>,
     particle_system: Res<ParticleSystem>,
     time: Res<Time>,
     mut particle_query: Query<(&mut Transform, &Particle)>,
 ) {
-    if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
-        if let Some(raw) = fps.value() {
-            println!("{raw:.2}");
-        }
-        if let Some(sma) = fps.average() {
-            println!("{sma:.2}");
-        }
-        if let Some(ema) = fps.smoothed() {
-            println!("{ema:.2}");
-        }
-    };
-    dbg!(particle_query.iter().count());
-
     let dt = time.delta_secs() * particle_system.speed;
     let beta = particle_system.beta;
     let gamma = particle_system.gamma;
     let gamma_beta_diff = gamma - beta;
     let one_minus_gamma = 1.0 - gamma;
+    let attraction_radius = particle_system.attraction_radius;
 
-    let particles: Vec<(Vec3, usize)> = particle_query
-        .iter()
-        .map(|(transform, particle)| (transform.translation, particle.color_id))
-        .collect();
+    // Create a spatial grid for faster neighbor lookups
+    let cell_size = attraction_radius;
+    let mut grid: HashMap<(i32, i32), Vec<(Vec3, usize)>> = HashMap::new();
 
+    // Populate the grid
+    for (transform, particle) in particle_query.iter() {
+        let pos = transform.translation;
+        let cell_x = (pos.x / cell_size).floor() as i32;
+        let cell_y = (pos.y / cell_size).floor() as i32;
+        grid.entry((cell_x, cell_y))
+            .or_default()
+            .push((pos, particle.color_id));
+    }
+
+    // Update particles
     for (mut transform, particle) in &mut particle_query {
+        let pos = transform.translation;
+        let cell_x = (pos.x / cell_size).floor() as i32;
+        let cell_y = (pos.y / cell_size).floor() as i32;
+
         let mut force = Vec2::ZERO;
         let mut count = 0.0;
 
-        for (other_pos, other_color_id) in particles.iter() {
-            if transform.translation == *other_pos {
-                continue;
-            }
+        // Check neighboring cells
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                if let Some(cell_particles) = grid.get(&(cell_x + dx, cell_y + dy)) {
+                    for &(other_pos, other_color_id) in cell_particles {
+                        if pos == other_pos {
+                            continue;
+                        }
 
-            let to_other = *other_pos - transform.translation;
-            let distance = to_other.length() / particle_system.attraction_radius;
+                        let to_other = other_pos - pos;
+                        let distance = to_other.length() / attraction_radius;
 
-            if distance < 1.0 {
-                let direction = to_other.truncate().normalize();
-                let behavior = particle_system.get_behavior(particle.color_id, *other_color_id);
+                        if distance < 1.0 {
+                            let direction = to_other.truncate().normalize();
+                            let behavior =
+                                particle_system.get_behavior(particle.color_id, other_color_id);
 
-                let force_magnitude = if distance < beta {
-                    -1.0 + (distance / beta)
-                } else if distance < gamma {
-                    behavior * ((distance - beta) / gamma_beta_diff)
-                } else {
-                    behavior * ((1.0 - distance) / one_minus_gamma)
-                };
+                            let force_magnitude = if distance < beta {
+                                -1.0 + (distance / beta)
+                            } else if distance < gamma {
+                                behavior * ((distance - beta) / gamma_beta_diff)
+                            } else {
+                                behavior * ((1.0 - distance) / one_minus_gamma)
+                            };
 
-                force += direction * force_magnitude;
-                count += 1.0;
+                            force += direction * force_magnitude;
+                            count += 1.0;
+                        }
+                    }
+                }
             }
         }
 
