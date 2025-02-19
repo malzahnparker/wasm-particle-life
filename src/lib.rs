@@ -258,9 +258,13 @@ fn setup(
             if i * grid_size + j >= NUM_PARTICLES {
                 break;
             }
-            let x = i as f32 * spacing_x - WINDOW_WIDTH / 2.0 + spacing_x / 2.0;
-            let y = j as f32 * spacing_y - WINDOW_HEIGHT / 2.0 + spacing_y / 2.0;
-
+            let mut x = i as f32 * spacing_x - WINDOW_WIDTH / 2.0 + spacing_x / 2.0;
+            let mut y = j as f32 * spacing_y - WINDOW_HEIGHT / 2.0 + spacing_y / 2.0;
+            if x % 2.0 == 0.0 {
+                x += 5.0;
+            } else {
+                y += 2.0;
+            }
             let color_id = (i * grid_size + j) % particle_system.colors.len();
 
             commands.spawn((
@@ -273,6 +277,7 @@ fn setup(
             ));
         }
     }
+    
 }
 
 fn update_particles(
