@@ -6,6 +6,7 @@ use bevy::{
     window::WindowResolution,
 };
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use rand::{seq::SliceRandom, Rng};
 use std::collections::HashMap;
 
 #[derive(Resource)]
@@ -163,18 +164,23 @@ impl ParticleSystem {
             css::DIM_GRAY,
         ];
 
-        let num_colors = 50; // Fixed number of colors for simplicity
-        let colors: Vec<Color> = all_colors
-            .into_iter()
-            .take(num_colors)
-            .map(Color::from)
+        let mut rng = rand::rng();
+        let num_colors = rng.random_range(20..=100);
+        let mut colors_indices: Vec<usize> = (0..all_colors.len()).collect();
+        colors_indices.shuffle(&mut rng);
+        let colors: Vec<Color> = colors_indices[0..num_colors]
+            .iter()
+            .map(|&i| Color::from(all_colors[i]))
             .collect();
+
         let n = colors.len();
 
-        let behavior_matrix = vec![vec![0.0; n]; n]; // Initialize with zeros
+        let behavior_matrix = (0..n)
+            .map(|_| (0..n).map(|_| rng.random_range(-1.0..=1.0)).collect())
+            .collect();
 
-        let beta = 0.25;
-        let gamma = 0.75;
+        let beta = rng.random_range(0.1..=0.4);
+        let gamma = rng.random_range(0.6..=0.9);
         let attraction_radius = 100.0;
 
         ParticleSystem {
@@ -191,12 +197,16 @@ impl ParticleSystem {
         self.behavior_matrix[from_color][to_color]
     }
     fn regenerate_matrix(&mut self) {
+        let mut rng = rand::rng();
         let n = self.colors.len();
-        self.behavior_matrix = vec![vec![0.0; n]; n]; // Initialize with zeros
+        self.behavior_matrix = (0..n)
+            .map(|_| (0..n).map(|_| rng.random_range(-1.0..=1.0)).collect())
+            .collect();
     }
     fn regenerate_constants(&mut self) {
-        self.beta = 0.25;
-        self.gamma = 0.75;
+        let mut rng = rand::rng();
+        self.beta = rng.random_range(0.1..=0.4);
+        self.gamma = rng.random_range(0.6..=0.9);
         self.attraction_radius = 100.0;
     }
 }
@@ -238,7 +248,6 @@ fn main() {
         )
         .run();
 }
-
 fn setup(
     mut commands: Commands,
     particle_system: Res<ParticleSystem>,
@@ -249,29 +258,20 @@ fn setup(
 
     dbg!(&particle_system.behavior_matrix);
 
-    let grid_size = (NUM_PARTICLES as f32).sqrt().ceil() as usize;
-    let spacing_x = WINDOW_WIDTH / grid_size as f32;
-    let spacing_y = WINDOW_HEIGHT / grid_size as f32;
+    let mut rng = rand::rng();
 
-    for i in 0..grid_size {
-        for j in 0..grid_size {
-            if i * grid_size + j >= NUM_PARTICLES {
-                break;
-            }
-            let x = i as f32 * spacing_x - WINDOW_WIDTH / 2.0 + spacing_x / 2.0;
-            let y = j as f32 * spacing_y - WINDOW_HEIGHT / 2.0 + spacing_y / 2.0;
+    for _ in 0..NUM_PARTICLES {
+        let x = rng.random_range(-WINDOW_WIDTH / 2.0..WINDOW_WIDTH / 2.0);
+        let y = rng.random_range(-WINDOW_HEIGHT / 2.0..WINDOW_HEIGHT / 2.0);
 
-            let color_id = (i * grid_size + j) % particle_system.colors.len();
+        let color_id = rng.random_range(0..particle_system.colors.len());
 
-            commands.spawn((
-                Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
-                MeshMaterial2d(
-                    materials.add(ColorMaterial::from(particle_system.colors[color_id])),
-                ),
-                Transform::from_xyz(x, y, 0.0),
-                Particle { color_id },
-            ));
-        }
+        commands.spawn((
+            Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
+            MeshMaterial2d(materials.add(ColorMaterial::from(particle_system.colors[color_id]))),
+            Transform::from_xyz(x, y, 0.0),
+            Particle { color_id },
+        ));
     }
 }
 
@@ -405,6 +405,7 @@ fn handle_matrix_regeneration(
         }
 
         // Generate new colors and matrix
+        let mut rng = rand::rng();
         let all_colors = vec![
             // Reds
             css::RED,
@@ -533,41 +534,33 @@ fn handle_matrix_regeneration(
             css::DIM_GRAY,
         ];
 
-        let num_colors = 50; // Fixed number of colors for simplicity
-        let colors: Vec<Color> = all_colors
-            .into_iter()
-            .take(num_colors)
-            .map(Color::from)
+        let num_colors = rng.random_range(20..=100);
+        let mut colors_indices: Vec<usize> = (0..all_colors.len()).collect();
+        colors_indices.shuffle(&mut rng);
+        let colors: Vec<Color> = colors_indices[0..num_colors]
+            .iter()
+            .map(|&i| Color::from(all_colors[i]))
             .collect();
+
         // Update ParticleSystem
         particle_system.colors = colors;
         particle_system.regenerate_matrix();
         particle_system.regenerate_constants();
 
         // Spawn new particles
-        let grid_size = (NUM_PARTICLES as f32).sqrt().ceil() as usize;
-        let spacing_x = WINDOW_WIDTH / grid_size as f32;
-        let spacing_y = WINDOW_HEIGHT / grid_size as f32;
+        for _ in 0..NUM_PARTICLES {
+            let x = rng.random_range(-WINDOW_WIDTH / 2.0..WINDOW_WIDTH / 2.0);
+            let y = rng.random_range(-WINDOW_HEIGHT / 2.0..WINDOW_HEIGHT / 2.0);
+            let color_id = rng.random_range(0..particle_system.colors.len());
 
-        for i in 0..grid_size {
-            for j in 0..grid_size {
-                if i * grid_size + j >= NUM_PARTICLES {
-                    break;
-                }
-                let x = i as f32 * spacing_x - WINDOW_WIDTH / 2.0 + spacing_x / 2.0;
-                let y = j as f32 * spacing_y - WINDOW_HEIGHT / 2.0 + spacing_y / 2.0;
-
-                let color_id = (i * grid_size + j) % particle_system.colors.len();
-
-                commands.spawn((
-                    Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
-                    MeshMaterial2d(
-                        materials.add(ColorMaterial::from(particle_system.colors[color_id])),
-                    ),
-                    Transform::from_xyz(x, y, 0.0),
-                    Particle { color_id },
-                ));
-            }
+            commands.spawn((
+                Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
+                MeshMaterial2d(
+                    materials.add(ColorMaterial::from(particle_system.colors[color_id])),
+                ),
+                Transform::from_xyz(x, y, 0.0),
+                Particle { color_id },
+            ));
         }
     }
     if keyboard.just_pressed(KeyCode::KeyQ) {
@@ -623,30 +616,20 @@ fn ui_system(
                         commands.entity(entity).despawn();
                     }
                     // Spawn new particles
-                    let grid_size = (particle_count.count as f32).sqrt().ceil() as usize;
-                    let spacing_x = WINDOW_WIDTH / grid_size as f32;
-                    let spacing_y = WINDOW_HEIGHT / grid_size as f32;
-
-                    for i in 0..grid_size {
-                        for j in 0..grid_size {
-                            if i * grid_size + j >= particle_count.count {
-                                break;
-                            }
-                            let x = i as f32 * spacing_x - WINDOW_WIDTH / 2.0 + spacing_x / 2.0;
-                            let y = j as f32 * spacing_y - WINDOW_HEIGHT / 2.0 + spacing_y / 2.0;
-
-                            let color_id = (i * grid_size + j) % particle_system.colors.len();
-
-                            commands.spawn((
-                                Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
-                                MeshMaterial2d(
-                                    materials
-                                        .add(ColorMaterial::from(particle_system.colors[color_id])),
-                                ),
-                                Transform::from_xyz(x, y, 0.0),
-                                Particle { color_id },
-                            ));
-                        }
+                    let mut rng = rand::thread_rng();
+                    for _ in 0..particle_count.count {
+                        let x = rng.gen_range(-WINDOW_WIDTH / 2.0..WINDOW_WIDTH / 2.0);
+                        let y = rng.gen_range(-WINDOW_HEIGHT / 2.0..WINDOW_HEIGHT / 2.0);
+                        let color_id = rng.gen_range(0..particle_system.colors.len());
+                        commands.spawn((
+                            Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
+                            MeshMaterial2d(
+                                materials
+                                    .add(ColorMaterial::from(particle_system.colors[color_id])),
+                            ),
+                            Transform::from_xyz(x, y, 0.0),
+                            Particle { color_id },
+                        ));
                     }
                 }
             });
@@ -691,6 +674,7 @@ fn ui_system(
                         commands.entity(entity).despawn();
                     }
                     // Update ParticleSystem with new color count
+                    let mut rng = rand::thread_rng();
                     let all_colors = vec![
                         // Reds
                         css::RED,
@@ -819,10 +803,11 @@ fn ui_system(
                         css::DIM_GRAY,
                     ];
 
-                    let colors: Vec<Color> = all_colors
-                        .into_iter()
-                        .take(color_count as usize)
-                        .map(Color::from)
+                    let mut colors_indices: Vec<usize> = (0..all_colors.len()).collect();
+                    colors_indices.shuffle(&mut rng);
+                    let colors: Vec<Color> = colors_indices[0..color_count as usize]
+                        .iter()
+                        .map(|&i| Color::from(all_colors[i]))
                         .collect();
 
                     particle_system.colors = colors;
@@ -830,30 +815,19 @@ fn ui_system(
                     particle_system.regenerate_constants();
 
                     // Spawn new particles
-                    let grid_size = (particle_count.count as f32).sqrt().ceil() as usize;
-                    let spacing_x = WINDOW_WIDTH / grid_size as f32;
-                    let spacing_y = WINDOW_HEIGHT / grid_size as f32;
-
-                    for i in 0..grid_size {
-                        for j in 0..grid_size {
-                            if i * grid_size + j >= particle_count.count {
-                                break;
-                            }
-                            let x = i as f32 * spacing_x - WINDOW_WIDTH / 2.0 + spacing_x / 2.0;
-                            let y = j as f32 * spacing_y - WINDOW_HEIGHT / 2.0 + spacing_y / 2.0;
-
-                            let color_id = (i * grid_size + j) % particle_system.colors.len();
-
-                            commands.spawn((
-                                Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
-                                MeshMaterial2d(
-                                    materials
-                                        .add(ColorMaterial::from(particle_system.colors[color_id])),
-                                ),
-                                Transform::from_xyz(x, y, 0.0),
-                                Particle { color_id },
-                            ));
-                        }
+                    for _ in 0..particle_count.count {
+                        let x = rng.gen_range(-WINDOW_WIDTH / 2.0..WINDOW_WIDTH / 2.0);
+                        let y = rng.gen_range(-WINDOW_HEIGHT / 2.0..WINDOW_HEIGHT / 2.0);
+                        let color_id = rng.gen_range(0..particle_system.colors.len());
+                        commands.spawn((
+                            Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
+                            MeshMaterial2d(
+                                materials
+                                    .add(ColorMaterial::from(particle_system.colors[color_id])),
+                            ),
+                            Transform::from_xyz(x, y, 0.0),
+                            Particle { color_id },
+                        ));
                     }
                 }
             });
@@ -875,30 +849,20 @@ fn ui_system(
                     // Generate new colors and matrix
                     *particle_system = ParticleSystem::new();
                     // Spawn new particles
-                    let grid_size = (particle_count.count as f32).sqrt().ceil() as usize;
-                    let spacing_x = WINDOW_WIDTH / grid_size as f32;
-                    let spacing_y = WINDOW_HEIGHT / grid_size as f32;
-
-                    for i in 0..grid_size {
-                        for j in 0..grid_size {
-                            if i * grid_size + j >= particle_count.count {
-                                break;
-                            }
-                            let x = i as f32 * spacing_x - WINDOW_WIDTH / 2.0 + spacing_x / 2.0;
-                            let y = j as f32 * spacing_y - WINDOW_HEIGHT / 2.0 + spacing_y / 2.0;
-
-                            let color_id = (i * grid_size + j) % particle_system.colors.len();
-
-                            commands.spawn((
-                                Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
-                                MeshMaterial2d(
-                                    materials
-                                        .add(ColorMaterial::from(particle_system.colors[color_id])),
-                                ),
-                                Transform::from_xyz(x, y, 0.0),
-                                Particle { color_id },
-                            ));
-                        }
+                    let mut rng = rand::thread_rng();
+                    for _ in 0..particle_count.count {
+                        let x = rng.gen_range(-WINDOW_WIDTH / 2.0..WINDOW_WIDTH / 2.0);
+                        let y = rng.gen_range(-WINDOW_HEIGHT / 2.0..WINDOW_HEIGHT / 2.0);
+                        let color_id = rng.gen_range(0..particle_system.colors.len());
+                        commands.spawn((
+                            Mesh2d(meshes.add(Circle::new(PARTICLE_SIZE / 2.0))),
+                            MeshMaterial2d(
+                                materials
+                                    .add(ColorMaterial::from(particle_system.colors[color_id])),
+                            ),
+                            Transform::from_xyz(x, y, 0.0),
+                            Particle { color_id },
+                        ));
                     }
                 }
             });
